@@ -1,12 +1,10 @@
 package com.example.LMS_Ai_Proctoring.controller;
 
+import com.example.LMS_Ai_Proctoring.dto.AudioAnalysisResult;
 import com.example.LMS_Ai_Proctoring.dto.FaceAnalysisResult;
 import com.example.LMS_Ai_Proctoring.enums.ProctoringEventType;
 import com.example.LMS_Ai_Proctoring.responseDTO.*;
-import com.example.LMS_Ai_Proctoring.service.FaceDetectionService;
-import com.example.LMS_Ai_Proctoring.service.ProctoringService;
-import com.example.LMS_Ai_Proctoring.service.ProctoringSessionService;
-import com.example.LMS_Ai_Proctoring.service.ProctoringViolationService;
+import com.example.LMS_Ai_Proctoring.service.*;
 
 import lombok.RequiredArgsConstructor;
 
@@ -30,6 +28,8 @@ public class ProctoringController {
     private final ProctoringSessionService proctoringSessionService;
 
     private final ProctoringViolationService proctoringViolationService;
+
+    private AudioAnalysisService audioAnalysisService;
 
 
 
@@ -301,5 +301,10 @@ public class ProctoringController {
         return ResponseEntity.ok(
                 response
         );
+    }
+
+    @PostMapping(value = "/audio/analyze", consumes = "audio/*")
+    public ResponseEntity<AudioAnalysisResult> analyzeAudio(@RequestBody byte[] audioChunk) {
+        return ResponseEntity.ok(audioAnalysisService.analyze(audioChunk));
     }
 }
