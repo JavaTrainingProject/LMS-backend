@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-
+@CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/api/v1/proctoring")
 @RequiredArgsConstructor
@@ -52,52 +52,55 @@ public class ProctoringController {
     ) throws IOException {
 
         FaceAnalysisResult result =
-                faceDetectionService.analyzeFace(file);
+                faceDetectionService.analyzeFace(
+                        file
+                );
 
         FaceDetectionResponse response;
-
 
 
         // NO FACE
 
         if (result.getFaceCount() == 0) {
 
-            response = FaceDetectionResponse.builder()
-                    .faceCount(0)
-                    .eventType(
-                            ProctoringEventType.NO_FACE_DETECTED
-                    )
-                    .violation(true)
-                    .message(
-                            "No face detected"
-                    )
-                    .build();
+            response =
+                    FaceDetectionResponse.builder()
+                            .faceCount(0)
+                            .eventType(
+                                    ProctoringEventType
+                                            .NO_FACE_DETECTED
+                            )
+                            .violation(true)
+                            .message(
+                                    "No face detected"
+                            )
+                            .build();
         }
-
 
 
         // MULTIPLE FACES
 
         else if (result.getFaceCount() > 1) {
 
-            response = FaceDetectionResponse.builder()
-                    .faceCount(
-                            result.getFaceCount()
-                    )
-                    .eventType(
-                            ProctoringEventType
-                                    .MULTIPLE_FACES_DETECTED
-                    )
-                    .violation(true)
-                    .message(
-                            "Multiple faces detected"
-                    )
-                    .build();
+            response =
+                    FaceDetectionResponse.builder()
+                            .faceCount(
+                                    result.getFaceCount()
+                            )
+                            .eventType(
+                                    ProctoringEventType
+                                            .MULTIPLE_FACES_DETECTED
+                            )
+                            .violation(true)
+                            .message(
+                                    "Multiple faces detected"
+                            )
+                            .build();
         }
 
 
-
         // HEAD LOOKING AWAY
+
         else if (
                 "LOOKING_LEFT".equals(
                         result.getHeadDirection()
@@ -106,43 +109,28 @@ public class ProctoringController {
                         "LOOKING_RIGHT".equals(
                                 result.getHeadDirection()
                         )
-        ) {
-
-            response = FaceDetectionResponse.builder()
-                    .faceCount(1)
-                    .eventType(
-                            ProctoringEventType.LOOKING_AWAY
-                    )
-                    .violation(true)
-                    .message(
-                            "Student head is turned away"
-                    )
-                    .build();
-        }
-
-
-        // EYES LOOKING AWAY
-
-        else if (
-                "GAZE_LEFT".equals(
-                        result.getGazeDirection()
-                )
                         ||
-                        "GAZE_RIGHT".equals(
-                                result.getGazeDirection()
+                        "LOOKING_UP".equals(
+                                result.getHeadDirection()
+                        )
+                        ||
+                        "LOOKING_DOWN".equals(
+                                result.getHeadDirection()
                         )
         ) {
 
-            response = FaceDetectionResponse.builder()
-                    .faceCount(1)
-                    .eventType(
-                            ProctoringEventType.LOOKING_AWAY
-                    )
-                    .violation(true)
-                    .message(
-                            "Student eyes are looking away"
-                    )
-                    .build();
+            response =
+                    FaceDetectionResponse.builder()
+                            .faceCount(1)
+                            .eventType(
+                                    ProctoringEventType
+                                            .LOOKING_AWAY
+                            )
+                            .violation(true)
+                            .message(
+                                    "Student head is turned away"
+                            )
+                            .build();
         }
 
 
@@ -151,17 +139,18 @@ public class ProctoringController {
 
         else {
 
-            response = FaceDetectionResponse.builder()
-                    .faceCount(1)
-                    .eventType(
-                            ProctoringEventType
-                                    .SINGLE_FACE_DETECTED
-                    )
-                    .violation(false)
-                    .message(
-                            "Student is looking forward"
-                    )
-                    .build();
+            response =
+                    FaceDetectionResponse.builder()
+                            .faceCount(1)
+                            .eventType(
+                                    ProctoringEventType
+                                            .SINGLE_FACE_DETECTED
+                            )
+                            .violation(false)
+                            .message(
+                                    "Student is looking forward"
+                            )
+                            .build();
         }
 
 
@@ -178,7 +167,8 @@ public class ProctoringController {
     startSession() {
 
         ProctoringSessionResponse response =
-                proctoringSessionService.startSession();
+                proctoringSessionService
+                        .startSession();
 
         return ResponseEntity.ok(
                 response
@@ -195,9 +185,10 @@ public class ProctoringController {
     ) {
 
         ProctoringSessionResponse response =
-                proctoringSessionService.getSession(
-                        sessionId
-                );
+                proctoringSessionService
+                        .getSession(
+                                sessionId
+                        );
 
         return ResponseEntity.ok(
                 response
@@ -205,8 +196,7 @@ public class ProctoringController {
     }
 
 
-
-    // 4. CONTINUOUS MONITORING FRAME API
+    // 4. PROCESS MONITORING FRAME
 
     @PostMapping(
             value = "/sessions/{sessionId}/frames",
@@ -218,12 +208,10 @@ public class ProctoringController {
             @RequestPart("file") MultipartFile file
     ) throws IOException {
 
-
-        // Frame sirf ACTIVE session me process hoga
-        proctoringSessionService.validateActiveSession(
-                sessionId
-        );
-
+        proctoringSessionService
+                .validateActiveSession(
+                        sessionId
+                );
 
         ProctoringFrameResponse response =
                 proctoringService.processFrame(
@@ -231,12 +219,10 @@ public class ProctoringController {
                         file
                 );
 
-
         return ResponseEntity.ok(
                 response
         );
     }
-
 
 
     // 5. GET SESSION VIOLATIONS
@@ -249,18 +235,15 @@ public class ProctoringController {
             @PathVariable Long sessionId
     ) {
 
-
-        // First check session exists or not
         proctoringSessionService.getSession(
                 sessionId
         );
 
-
         ProctoringViolationResponse response =
-                proctoringViolationService.getViolations(
-                        sessionId
-                );
-
+                proctoringViolationService
+                        .getViolations(
+                                sessionId
+                        );
 
         return ResponseEntity.ok(
                 response
@@ -280,9 +263,10 @@ public class ProctoringController {
     ) {
 
         ProctoringSessionResponse response =
-                proctoringSessionService.endSession(
-                        sessionId
-                );
+                proctoringSessionService
+                        .endSession(
+                                sessionId
+                        );
 
         return ResponseEntity.ok(
                 response
@@ -290,7 +274,7 @@ public class ProctoringController {
     }
 
 
-// GET SESSION SUMMARY
+    // 7. GET SESSION SUMMARY
 
     @GetMapping(
             "/sessions/{sessionId}/summary"

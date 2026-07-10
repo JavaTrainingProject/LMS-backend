@@ -10,14 +10,4 @@ public class FaceAnalysisResult {
     private int faceCount;
 
     private String headDirection;
-
-    private String gazeDirection;
-
-    private boolean eyesDetected;
-
-    private double rightEyeX;
-    private double rightEyeY;
-
-    private double leftEyeX;
-    private double leftEyeY;
 }

@@ -1,46 +1,52 @@
 package com.example.LMS_Ai_Proctoring.dto;
 
-import lombok.Getter;
+import lombok.Data;
 
-@Getter
+
+@Data
 public class MonitoringState {
 
     private String lastEvent;
 
+    private String lastDirection;
+
     private int consecutiveCount;
 
-    /*
-     * Current continuous suspicious activity
-     * already save hui hai ya nahi.
-     */
-    private boolean violationLocked;
-
-    /*
-     * Consecutive NORMAL frames count.
-     */
     private int normalRecoveryCount;
+
+    private boolean violationLocked;
 
 
 
     // RECORD SUSPICIOUS EVENT
 
-    public synchronized void recordEvent(
-            String currentEvent
+    public void recordEvent(
+            String event,
+            String direction
     ) {
 
-        if (currentEvent == null) {
-            return;
-        }
+        // Suspicious frame aaya
+        // normal recovery reset karo
 
-        /*
-         * Suspicious frame aaya,
-         * so normal recovery sequence break.
-         */
         normalRecoveryCount = 0;
 
 
-        // Same suspicious event continues
-        if (currentEvent.equals(lastEvent)) {
+        /*
+         * Same event + same direction
+         *
+         * Example:
+         * LOOKING_AWAY + LOOKING_LEFT
+         * LOOKING_AWAY + LOOKING_LEFT
+         */
+
+        if (
+                event.equals(lastEvent)
+                        &&
+                        isSameDirection(
+                                direction,
+                                lastDirection
+                        )
+        ) {
 
             consecutiveCount++;
 
@@ -49,65 +55,119 @@ public class MonitoringState {
 
 
         /*
-         * Different suspicious event starts.
+         * Event ya direction change hui.
          *
          * Example:
-         * LOOKING_AWAY
-         *      ↓
-         * NO_FACE_DETECTED
+         * LEFT -> RIGHT
+         * RIGHT -> LEFT
+         * LOOKING_AWAY -> NO_FACE
+         *
+         * Isko new suspicious sequence
+         * treat karenge.
          */
-        lastEvent = currentEvent;
 
-        consecutiveCount = 1;
+        lastEvent =
+                event;
 
-        violationLocked = false;
+        lastDirection =
+                direction;
+
+        consecutiveCount =
+                1;
+
+
+        // New sequence ke liye unlock
+
+        violationLocked =
+                false;
     }
 
 
 
     // RECORD NORMAL FRAME
 
-    public synchronized void recordNormalFrame() {
+    public void recordNormalFrame() {
 
         normalRecoveryCount++;
     }
 
 
 
-    // LOCK CONFIRMED VIOLATION
+    // LOCK VIOLATION
 
-    public synchronized void lockViolation() {
+    public void lockViolation() {
 
-        violationLocked = true;
+        violationLocked =
+                true;
     }
 
 
 
-    // RESET AFTER CONFIRMED RECOVERY
+    // RESET AFTER NORMAL RECOVERY
 
-    public synchronized void resetAfterRecovery() {
+    public void resetAfterRecovery() {
 
-        lastEvent = null;
+        lastEvent =
+                null;
 
-        consecutiveCount = 0;
+        lastDirection =
+                null;
 
-        violationLocked = false;
+        consecutiveCount =
+                0;
 
-        normalRecoveryCount = 0;
+        normalRecoveryCount =
+                0;
+
+        violationLocked =
+                false;
     }
 
 
 
-    // CLEAR COMPLETE STATE
+    // CHECK SAME DIRECTION
 
-    public synchronized void reset() {
+    private boolean isSameDirection(
+            String currentDirection,
+            String previousDirection
+    ) {
 
-        lastEvent = null;
+        if (currentDirection == null
+                && previousDirection == null) {
 
-        consecutiveCount = 0;
+            return true;
+        }
 
-        violationLocked = false;
 
-        normalRecoveryCount = 0;
+        if (currentDirection == null
+                || previousDirection == null) {
+
+            return false;
+        }
+
+
+        return currentDirection.equals(
+                previousDirection
+        );
+    }
+
+    // RESET AFTER VIOLATION
+
+    public void resetAfterViolation() {
+
+        lastEvent =
+                null;
+
+        lastDirection =
+                null;
+
+        consecutiveCount =
+                0;
+
+        normalRecoveryCount =
+                0;
+
+        violationLocked =
+                false;
     }
 }

@@ -2,8 +2,12 @@ package com.example.LMS_Ai_Proctoring.service;
 
 import com.example.LMS_Ai_Proctoring.dto.AudioAnalysisResult;
 import com.example.LMS_Ai_Proctoring.dto.FaceAnalysisResult;
-import com.example.LMS_Ai_Proctoring.dto.ProctoringViolation;
+import com.example.LMS_Ai_Proctoring.entity.ProctoringViolationEntity;
+import com.example.LMS_Ai_Proctoring.repository.ProctoringViolationRepository;
 import com.example.LMS_Ai_Proctoring.responseDTO.ProctoringViolationResponse;
+import com.example.LMS_Ai_Proctoring.dto.ProctoringViolation;
+
+import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Service;
 
@@ -11,29 +15,15 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 
 @Service
+@RequiredArgsConstructor
 public class ProctoringViolationService {
 
-    /*
-     * sessionId -> violations
-     *
-     * CopyOnWriteArrayList use ki hai
-     * because multiple frame requests
-     * parallel aa sakti hain.
-     */
-    private final Map<Long, List<ProctoringViolation>>
-            sessionViolations =
-            new ConcurrentHashMap<>();
-
-
-    private final AtomicLong violationIdGenerator =
-            new AtomicLong(0);
+    private final ProctoringViolationRepository
+            proctoringViolationRepository;
 
 
     /*
@@ -51,16 +41,41 @@ public class ProctoringViolationService {
     // ================= FACE VIOLATIONS (unchanged behaviour) =================
 
     // SAVE VIOLATION
+
     public ProctoringViolation saveViolation(
             Long sessionId,
             String eventType,
-            FaceAnalysisResult result
+            FaceAnalysisResult result,
+            int consecutiveCount
     ) {
 
-        Long violationId =
-                violationIdGenerator.incrementAndGet();
+        String headDirection = null;
 
 
+        if ("LOOKING_AWAY".equals(eventType)) {
+
+            headDirection =
+                    result.getHeadDirection();
+        }
+
+
+        ProctoringViolationEntity entity =
+                ProctoringViolationEntity.builder()
+                        .sessionId(sessionId)
+                        .eventType(eventType)
+                        .faceCount(
+                                result.getFaceCount()
+                        )
+                        .headDirection(
+                                headDirection
+                        )
+                        .consecutiveCount(
+                                consecutiveCount
+                        )
+                        .detectedAt(
+                                LocalDateTime.now()
+                        )
+                        .build();
         ProctoringViolation violation =
                 ProctoringViolation.builder()
                         .violationId(violationId)
@@ -73,17 +88,15 @@ public class ProctoringViolationService {
                         .build();
 
 
-        sessionViolations
-                .computeIfAbsent(
-                        sessionId,
-                        id -> new CopyOnWriteArrayList<>()
-                )
-                .add(
-                        violation
+        ProctoringViolationEntity savedEntity =
+                proctoringViolationRepository.save(
+                        entity
                 );
 
 
-        return violation;
+        return mapToDto(
+                savedEntity
+        );
     }
 
 
@@ -169,9 +182,31 @@ public class ProctoringViolationService {
     public ProctoringViolationResponse getViolations(Long sessionId) {
 
         List<ProctoringViolation> violations =
+                proctoringViolationRepository
+                        .findBySessionId(
+                                sessionId
+                        )
+                        .stream()
+                        .map(
+                                this::mapToDto
+                        )
+                        .toList();
+
                 sessionViolations.getOrDefault(sessionId, List.of());
 
         return ProctoringViolationResponse.builder()
+                .sessionId(
+                        sessionId
+                )
+                .totalViolations(
+                        violations.size()
+                )
+                .violations(
+                        violations
+                )
+                .message(
+                        "Proctoring violations fetched successfully"
+                )
                 .sessionId(sessionId)
                 .totalViolations(violations.size())
                 .violations(List.copyOf(violations))
@@ -180,7 +215,19 @@ public class ProctoringViolationService {
     }
 
 
+
     // GET TOTAL VIOLATION COUNT
+
+    public int getTotalViolationCount(
+            Long sessionId
+    ) {
+
+        return Math.toIntExact(
+                proctoringViolationRepository
+                        .countBySessionId(
+                                sessionId
+                        )
+        );
     public int getTotalViolationCount(Long sessionId) {
         return sessionViolations
                 .getOrDefault(sessionId, List.of())
@@ -190,11 +237,60 @@ public class ProctoringViolationService {
     // GET EVENT-WISE VIOLATION COUNTS
     public Map<String, Long> getViolationCounts(Long sessionId) {
 
+        return proctoringViolationRepository
+                .findBySessionId(
+                        sessionId
+                )
+                .stream()
+                .collect(
+                        Collectors.groupingBy(
+                                ProctoringViolationEntity::getEventType,
+                                Collectors.counting()
+                        )
+                );
+    }
+
+
+
+    // MAP ENTITY TO DTO
+
+    private ProctoringViolation mapToDto(
+            ProctoringViolationEntity entity
+    ) {
+
+        return new ProctoringViolation(
+                entity.getId(),
+                entity.getSessionId(),
+                entity.getEventType(),
+                entity.getFaceCount(),
+                entity.getHeadDirection(),
+                entity.getConsecutiveCount(),
+                entity.getDetectedAt()
+        );
+    }
+
+    public Map<String, Long> getHeadDirectionCounts(
+            Long sessionId
+    ) {
         List<ProctoringViolation> violations =
                 sessionViolations.getOrDefault(sessionId, List.of());
 
-        return violations
+        return proctoringViolationRepository
+                .findBySessionId(
+                        sessionId
+                )
                 .stream()
+                .filter(
+                        violation ->
+                                violation.getHeadDirection()
+                                        != null
+                )
+                .collect(
+                        Collectors.groupingBy(
+                                ProctoringViolationEntity::getHeadDirection,
+                                Collectors.counting()
+                        )
+                );
                 .collect(Collectors.groupingBy(
                         ProctoringViolation::getEventType,
                         Collectors.counting()

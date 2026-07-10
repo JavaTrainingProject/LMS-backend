@@ -23,7 +23,5 @@ public class ProctoringFrameResponse {
 
     private String headDirection;
 
-    private String gazeDirection;
-
     private String message;
 }
