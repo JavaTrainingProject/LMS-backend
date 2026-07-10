@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 @Service
 @RequiredArgsConstructor
 public class ProctoringService {
@@ -23,89 +22,62 @@ public class ProctoringService {
     private final ProctoringViolationService
             proctoringViolationService;
 
-
-    // sessionId -> monitoring state
+    // Session monitoring states
     private final Map<Long, MonitoringState> sessionStates =
             new ConcurrentHashMap<>();
 
-
-    /*
-     * 3 consecutive suspicious frames
-     * required to confirm violation.
-     */
+    // Frames required to confirm violation
     private static final int VIOLATION_THRESHOLD = 3;
 
-
-    /*
-     * 2 consecutive NORMAL frames
-     * required to confirm recovery.
-     */
+    // Normal frames required for recovery
     private static final int NORMAL_RECOVERY_THRESHOLD = 2;
 
 
-
-    // PROCESS FRAME
+    // Process frame
     public ProctoringFrameResponse processFrame(
             Long sessionId,
             MultipartFile file
     ) throws IOException {
 
-
-
-        // 1. VALIDATE SESSION ID
+        // Validate session
         if (sessionId == null) {
-
             throw new IllegalArgumentException(
                     "Session ID is required"
             );
         }
 
-
-
-        // 2. ANALYZE CURRENT FRAME
+        // Analyze frame
         FaceAnalysisResult analysisResult =
                 faceDetectionService.analyzeFace(
                         file
                 );
 
-
-
-        // 3. DETERMINE CURRENT EVENT
-
+        // Determine event
         String currentEvent =
                 determineEvent(
                         analysisResult
                 );
 
-
-        // 4. GET SESSION STATE
-
+        // Get monitoring state
         MonitoringState state =
                 sessionStates.computeIfAbsent(
                         sessionId,
                         id -> new MonitoringState()
                 );
 
-
-
-        // 5. NORMAL FRAME
-
+        // Handle normal frame
         if (currentEvent == null) {
 
-            // Record consecutive normal frame
             state.recordNormalFrame();
-
 
             int normalRecoveryCount =
                     state.getNormalRecoveryCount();
 
-
-            // Recovery confirmed
+            // Confirm recovery
             if (normalRecoveryCount
                     >= NORMAL_RECOVERY_THRESHOLD) {
 
                 state.resetAfterRecovery();
-
 
                 return buildResponse(
                         sessionId,
@@ -117,12 +89,6 @@ public class ProctoringService {
                 );
             }
 
-
-            /*
-             * Only one normal frame received.
-             *
-             * Do not unlock previous violation yet.
-             */
             return buildResponse(
                     sessionId,
                     false,
@@ -133,22 +99,19 @@ public class ProctoringService {
             );
         }
 
-
-
-        // 6. RECORD SUSPICIOUS EVENT
-
+        // Record suspicious event
         state.recordEvent(
-                currentEvent
+                currentEvent,
+                getEventDirection(
+                        currentEvent,
+                        analysisResult
+                )
         );
-
 
         int consecutiveCount =
                 state.getConsecutiveCount();
 
-
-
-        // 7. ALREADY RECORDED / LOCKED
-
+        // Check locked violation
         if (state.isViolationLocked()) {
 
             return buildResponse(
@@ -161,32 +124,22 @@ public class ProctoringService {
             );
         }
 
-
-
-        // 8. CHECK VIOLATION THRESHOLD
-
+        // Check violation threshold
         boolean violationConfirmed =
                 consecutiveCount
                         >= VIOLATION_THRESHOLD;
 
-
-
-        // 9. CONFIRMED VIOLATION
-
+        // Save confirmed violation
         if (violationConfirmed) {
 
-
-            // Save violation only once
             proctoringViolationService.saveViolation(
                     sessionId,
                     currentEvent,
-                    analysisResult
+                    analysisResult,
+                    consecutiveCount
             );
 
-
-            // Lock same continuous event
-            state.lockViolation();
-
+            state.resetAfterViolation();
 
             return buildResponse(
                     sessionId,
@@ -198,9 +151,7 @@ public class ProctoringService {
             );
         }
 
-
-
-        // 10. SUSPICIOUS BUT NOT CONFIRMED
+        // Suspicious event
         return buildResponse(
                 sessionId,
                 false,
@@ -212,60 +163,64 @@ public class ProctoringService {
     }
 
 
-    // DETERMINE EVENT
-
+    // Determine event
     private String determineEvent(
             FaceAnalysisResult result
     ) {
 
-
-        // NO FACE
         if (result.getFaceCount() == 0) {
-
             return "NO_FACE_DETECTED";
         }
 
-
-        // MULTIPLE FACES
         if (result.getFaceCount() > 1) {
-
             return "MULTIPLE_FACES_DETECTED";
         }
 
-
-        // HEAD LOOKING AWAY
-        if (
-                "LOOKING_LEFT".equals(
-                        result.getHeadDirection()
-                )
-                        ||
-                        "LOOKING_RIGHT".equals(
-                                result.getHeadDirection()
-                        )
-        ) {
-
+        if ("LOOKING_LEFT".equals(
+                result.getHeadDirection()
+        )) {
             return "LOOKING_AWAY";
         }
 
+        if ("LOOKING_RIGHT".equals(
+                result.getHeadDirection()
+        )) {
+            return "LOOKING_AWAY";
+        }
 
-        /*
-         * IMPORTANT:
-         *
-         * GAZE_LEFT / GAZE_RIGHT intentionally
-         * violation decision me use nahi kar rahe.
-         *
-         * Current gaze algorithm basic heuristic hai
-         * aur false positives de raha tha.
-         */
+        if ("LOOKING_UP".equals(
+                result.getHeadDirection()
+        )) {
+            return "LOOKING_AWAY";
+        }
 
+        if ("LOOKING_DOWN".equals(
+                result.getHeadDirection()
+        )) {
+            return "LOOKING_AWAY";
+        }
 
-        // NORMAL
         return null;
     }
 
 
-    // BUILD RESPONSE
+    // Get event direction
+    private String getEventDirection(
+            String currentEvent,
+            FaceAnalysisResult result
+    ) {
 
+        if ("LOOKING_AWAY".equals(
+                currentEvent
+        )) {
+            return result.getHeadDirection();
+        }
+
+        return null;
+    }
+
+
+    // Build response
     private ProctoringFrameResponse buildResponse(
             Long sessionId,
             boolean violationConfirmed,
@@ -294,9 +249,6 @@ public class ProctoringService {
                 .headDirection(
                         result.getHeadDirection()
                 )
-                .gazeDirection(
-                        result.getGazeDirection()
-                )
                 .message(
                         message
                 )
@@ -304,8 +256,7 @@ public class ProctoringService {
     }
 
 
-    // CLEAR SESSION STATE
-
+    // Clear session state
     public void clearSession(
             Long sessionId
     ) {
