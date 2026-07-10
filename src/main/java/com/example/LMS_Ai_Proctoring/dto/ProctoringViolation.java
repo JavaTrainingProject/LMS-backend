@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+
 @Data
 @AllArgsConstructor
 public class ProctoringViolation {
@@ -19,7 +20,7 @@ public class ProctoringViolation {
 
     private String headDirection;
 
-    private String gazeDirection;
+    private int consecutiveCount;
 
     private LocalDateTime detectedAt;
 }
