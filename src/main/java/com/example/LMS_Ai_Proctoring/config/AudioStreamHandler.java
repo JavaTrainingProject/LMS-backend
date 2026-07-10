@@ -14,6 +14,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
@@ -45,22 +46,29 @@ public class AudioStreamHandler extends AbstractWebSocketHandler {
         byte[] audioChunk = message.getPayload().array();
         Long sessionId = (Long) session.getAttributes().get("sessionId");
 
+        System.out.println("### DEBUG: sessionId = " + sessionId);
+        if (sessionId == null) {
+            session.sendMessage(new TextMessage("{\"error\":\"sessionId not set - send handshake first\"}"));
+            return;
+        }
+
         AudioAnalysisResult noiseResult = audioAnalysisService.analyze(audioChunk);
         proctoringViolationService.evaluateAudioResult(sessionId, noiseResult);
 
         SpeechToTextResult sttResult = speechToTextService.transcribeChunk(sessionId, audioChunk);
 
-        // send both back to client
-        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                Map.of("audio", noiseResult, "transcript", sttResult)
-        )));
+        Map<String, Object> combinedResponse = new HashMap<>();
+        combinedResponse.put("audio", noiseResult);
+        combinedResponse.put("transcript", sttResult);
+
+        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(combinedResponse)));
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         Long sessionId = (Long) session.getAttributes().get("sessionId");
         if (sessionId != null) {
-            speechToTextService.closeSession(sessionId); // free native Recognizer
+            speechToTextService.closeSession(sessionId);
         }
         session.getAttributes().remove("sessionId");
     }

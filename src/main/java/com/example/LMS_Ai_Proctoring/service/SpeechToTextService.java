@@ -29,9 +29,12 @@ public class SpeechToTextService {
     private final Map<Long, Recognizer> sessionRecognizers = new ConcurrentHashMap<>();
 
     private Recognizer getOrCreateRecognizer(Long sessionId) {
+        if (sessionId == null) {
+            throw new IllegalArgumentException("sessionId cannot be null - was handshake sent?");
+        }
         return sessionRecognizers.computeIfAbsent(sessionId, id -> {
             try {
-                return new Recognizer(voskModel, 16000.0f); // must match AudioConfig sample rate
+                return new Recognizer(voskModel, 16000.0f);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to create Vosk recognizer", e);
             }

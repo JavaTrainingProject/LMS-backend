@@ -2,6 +2,7 @@ package com.example.LMS_Ai_Proctoring.controller;
 
 import com.example.LMS_Ai_Proctoring.dto.AudioAnalysisResult;
 import com.example.LMS_Ai_Proctoring.dto.FaceAnalysisResult;
+import com.example.LMS_Ai_Proctoring.dto.SpeechToTextResult;
 import com.example.LMS_Ai_Proctoring.enums.ProctoringEventType;
 import com.example.LMS_Ai_Proctoring.responseDTO.*;
 import com.example.LMS_Ai_Proctoring.service.*;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 
 @RestController
@@ -32,6 +35,9 @@ public class ProctoringController {
 
     @Autowired
     private AudioAnalysisService audioAnalysisService;
+
+    @Autowired
+    private SpeechToTextService speechToTextService;
 
 
 
@@ -306,10 +312,20 @@ public class ProctoringController {
     }
 
     @PostMapping(value = "/audio/analyze", consumes = "audio/*")
-    public ResponseEntity<?> analyzeAudio(@RequestBody byte[] audioChunk) {
+    public ResponseEntity<?> analyzeAudio(
+            @RequestParam(defaultValue = "0") Long sessionId,
+            @RequestBody byte[] audioChunk) {
         try {
-            AudioAnalysisResult result = audioAnalysisService.analyze(audioChunk);
-            return ResponseEntity.ok(result);
+            AudioAnalysisResult audioResult = audioAnalysisService.analyze(audioChunk);
+            proctoringViolationService.evaluateAudioResult(sessionId, audioResult);
+
+            SpeechToTextResult transcriptResult = speechToTextService.transcribeChunk(sessionId, audioChunk);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("audio", audioResult);
+            response.put("transcript", transcriptResult);
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(e.getMessage() + " | " + e.getClass().getName());
