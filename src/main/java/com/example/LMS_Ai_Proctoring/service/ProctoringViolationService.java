@@ -149,7 +149,6 @@ public class ProctoringViolationService {
                         .faceCount(0)                       // n/a for audio events
                         .headDirection(null)                // n/a
                         .gazeDirection(null)                // n/a
-                        .decibelLevel(result.getDecibelLevel())
                         .speechDetected(result.isSpeechDetected())
                         .speakerCount(result.getSpeakerCount())
                         .detectedAt(now)
@@ -187,7 +186,6 @@ public class ProctoringViolationService {
                 .getOrDefault(sessionId, List.of())
                 .size();
     }
-
 
     // GET EVENT-WISE VIOLATION COUNTS
     public Map<String, Long> getViolationCounts(Long sessionId) {

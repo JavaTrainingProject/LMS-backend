@@ -8,6 +8,7 @@ import com.example.LMS_Ai_Proctoring.service.*;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +30,7 @@ public class ProctoringController {
 
     private final ProctoringViolationService proctoringViolationService;
 
+    @Autowired
     private AudioAnalysisService audioAnalysisService;
 
 
@@ -304,7 +306,13 @@ public class ProctoringController {
     }
 
     @PostMapping(value = "/audio/analyze", consumes = "audio/*")
-    public ResponseEntity<AudioAnalysisResult> analyzeAudio(@RequestBody byte[] audioChunk) {
-        return ResponseEntity.ok(audioAnalysisService.analyze(audioChunk));
+    public ResponseEntity<?> analyzeAudio(@RequestBody byte[] audioChunk) {
+        try {
+            AudioAnalysisResult result = audioAnalysisService.analyze(audioChunk);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(e.getMessage() + " | " + e.getClass().getName());
+        }
     }
 }

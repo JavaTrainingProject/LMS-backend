@@ -14,18 +14,18 @@ public class AudioAnalysisService {
     private SpeechDetectionService speechDetectionService;
 
     public AudioAnalysisResult analyze(byte[] audioChunk) {
-        double decibelLevel = noiseDetectionService.calculateDecibelLevel(audioChunk);
-        double energyLevel = speechDetectionService.calculateEnergyLevel(audioChunk);
+        double noisePct = noiseDetectionService.calculateNoisePercentage(audioChunk);
+        double speechPct = speechDetectionService.calculateSpeechPercentage(audioChunk);
 
-        boolean noiseDetected = noiseDetectionService.isNoiseDetected(decibelLevel);
-        boolean speechDetected = speechDetectionService.isSpeechDetected(energyLevel);
-        int speakerCount = speechDetectionService.estimateSpeakerCount(energyLevel);
+        boolean noiseDetected = noiseDetectionService.isNoiseDetected(noisePct);
+        boolean speechDetected = speechDetectionService.isSpeechDetected(speechPct);
+        int speakerCount = speechDetectionService.estimateSpeakerCount(speechPct);
 
         return AudioAnalysisResult.builder()
                 .noiseDetected(noiseDetected)
                 .speechDetected(speechDetected)
-                .decibelLevel(decibelLevel)
-                .energyLevel(energyLevel)
+                .noisePercentage(noisePct)
+                .speechPercentage(speechPct)
                 .speakerCount(speakerCount)
                 .timestampMillis(System.currentTimeMillis())
                 .build();

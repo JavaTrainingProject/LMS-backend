@@ -12,8 +12,8 @@ import lombok.NoArgsConstructor;
 public class AudioAnalysisResult {
     private boolean noiseDetected;
     private boolean speechDetected;
-    private double decibelLevel;
-    private double energyLevel;
-    private int speakerCount;      // if you extend to multi-speaker detection later
+    private double noisePercentage;   // 0-100
+    private double speechPercentage;  // 0-100 (same underlying value as noisePercentage now)
+    private int speakerCount;
     private long timestampMillis;
 }
