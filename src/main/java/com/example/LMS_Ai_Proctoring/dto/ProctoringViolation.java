@@ -1,13 +1,17 @@
 package com.example.LMS_Ai_Proctoring.dto;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 
 @Data
+@NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class ProctoringViolation {
 
     private Long violationId;
@@ -21,6 +25,14 @@ public class ProctoringViolation {
     private String headDirection;
 
     private int consecutiveCount;
+
+    // ---- new audio fields ----
+    private Double decibelLevel;
+
+    private Boolean speechDetected;
+
+    private Integer speakerCount;
+    // ---------------------------
 
     private LocalDateTime detectedAt;
 }

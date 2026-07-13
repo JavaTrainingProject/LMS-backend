@@ -71,4 +71,12 @@ public class ProctoringViolationEntity {
             nullable = false
     )
     private LocalDateTime detectedAt;
+
+    private Double decibelLevel;
+
+    private Boolean speechDetected;
+
+    private Integer speakerCount;
+
+
 }

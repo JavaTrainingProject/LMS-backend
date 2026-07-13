@@ -13,5 +13,15 @@ public enum ProctoringEventType {
 
     LOOKING_RIGHT,
 
-    LOOKING_AWAY
+    LOOKING_AWAY,
+
+    NOISE_DETECTED,
+
+    LOUD_NOISE_DETECTED,
+
+    SPEECH_DETECTED,
+
+    MULTIPLE_SPEAKERS_DETECTED,
+    
+    SILENCE_DETECTED
 }

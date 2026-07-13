@@ -1,25 +1,23 @@
 package com.example.LMS_Ai_Proctoring.controller;
 
+import com.example.LMS_Ai_Proctoring.dto.AudioAnalysisResult;
 import com.example.LMS_Ai_Proctoring.dto.FaceAnalysisResult;
+import com.example.LMS_Ai_Proctoring.dto.SpeechToTextResult;
 import com.example.LMS_Ai_Proctoring.enums.ProctoringEventType;
-import com.example.LMS_Ai_Proctoring.responseDTO.FaceDetectionResponse;
-import com.example.LMS_Ai_Proctoring.responseDTO.ProctoringFrameResponse;
-import com.example.LMS_Ai_Proctoring.responseDTO.ProctoringSessionResponse;
-import com.example.LMS_Ai_Proctoring.responseDTO.ProctoringSummaryResponse;
-import com.example.LMS_Ai_Proctoring.responseDTO.ProctoringViolationResponse;
-import com.example.LMS_Ai_Proctoring.service.FaceDetectionService;
-import com.example.LMS_Ai_Proctoring.service.ProctoringService;
-import com.example.LMS_Ai_Proctoring.service.ProctoringSessionService;
-import com.example.LMS_Ai_Proctoring.service.ProctoringViolationService;
+import com.example.LMS_Ai_Proctoring.responseDTO.*;
+import com.example.LMS_Ai_Proctoring.service.*;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -31,11 +29,16 @@ public class ProctoringController {
 
     private final ProctoringService proctoringService;
 
-    private final ProctoringSessionService
-            proctoringSessionService;
+    private final ProctoringSessionService proctoringSessionService;
 
-    private final ProctoringViolationService
-            proctoringViolationService;
+    private final ProctoringViolationService proctoringViolationService;
+
+    @Autowired
+    private AudioAnalysisService audioAnalysisService;
+
+    @Autowired
+    private SpeechToTextService speechToTextService;
+
 
 
     // 1. SINGLE IMAGE TEST API
@@ -129,6 +132,7 @@ public class ProctoringController {
                             )
                             .build();
         }
+
 
 
         // NORMAL
@@ -247,6 +251,7 @@ public class ProctoringController {
     }
 
 
+
     // 6. END PROCTORING SESSION
 
     @PostMapping(
@@ -288,5 +293,26 @@ public class ProctoringController {
         return ResponseEntity.ok(
                 response
         );
+    }
+
+    @PostMapping(value = "/audio/analyze", consumes = "audio/*")
+    public ResponseEntity<?> analyzeAudio(
+            @RequestParam(defaultValue = "0") Long sessionId,
+            @RequestBody byte[] audioChunk) {
+        try {
+            AudioAnalysisResult audioResult = audioAnalysisService.analyze(audioChunk);
+            proctoringViolationService.evaluateAudioResult(sessionId, audioResult);
+
+            SpeechToTextResult transcriptResult = speechToTextService.transcribeChunk(sessionId, audioChunk);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("audio", audioResult);
+            response.put("transcript", transcriptResult);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(e.getMessage() + " | " + e.getClass().getName());
+        }
     }
 }
