@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 
@@ -30,7 +31,10 @@ public class ProctoringViolationService {
      * Debounce map: sessionId + eventType -> last time it was recorded.
      * Prevents flooding when noise/speech is continuous
      * (e.g. someone talking for 30 seconds shouldn't create
-     * 300 SPEECH_DETECTED entries).
+     * 300 SPEECH_DETECTED rows in the DB).
+     *
+     * This stays in-memory (per instance) since it's just a
+     * rate-limiting guard, not persisted data.
      */
     private final Map<String, LocalDateTime> lastEventTimestamps =
             new ConcurrentHashMap<>();
@@ -38,7 +42,7 @@ public class ProctoringViolationService {
     private static final long DEBOUNCE_SECONDS = 5;
 
 
-    // ================= FACE VIOLATIONS (unchanged behaviour) =================
+    // ================= FACE VIOLATIONS (unchanged) =================
 
     // SAVE VIOLATION
 
@@ -76,16 +80,6 @@ public class ProctoringViolationService {
                                 LocalDateTime.now()
                         )
                         .build();
-        ProctoringViolation violation =
-                ProctoringViolation.builder()
-                        .violationId(violationId)
-                        .sessionId(sessionId)
-                        .eventType(eventType)
-                        .faceCount(result.getFaceCount())
-                        .headDirection(result.getHeadDirection())
-                        .gazeDirection(result.getGazeDirection())
-                        .detectedAt(LocalDateTime.now())
-                        .build();
 
 
         ProctoringViolationEntity savedEntity =
@@ -100,12 +94,12 @@ public class ProctoringViolationService {
     }
 
 
-    // ================= AUDIO VIOLATIONS (new) =================
+    // ================= AUDIO VIOLATIONS (new, DB-backed) =================
 
     /**
-     * Evaluates an AudioAnalysisResult and records violations for
+     * Evaluates an AudioAnalysisResult and persists violations for
      * noise / speech / multiple-speakers, with debouncing per event type
-     * so continuous conditions don't spam the violations list.
+     * so continuous conditions don't spam the violations table.
      */
     public void evaluateAudioResult(Long sessionId, AudioAnalysisResult result) {
 
@@ -152,34 +146,30 @@ public class ProctoringViolationService {
 
         lastEventTimestamps.put(debounceKey, now);
 
-        Long violationId = violationIdGenerator.incrementAndGet();
-
-        ProctoringViolation violation =
-                ProctoringViolation.builder()
-                        .violationId(violationId)
+        ProctoringViolationEntity entity =
+                ProctoringViolationEntity.builder()
                         .sessionId(sessionId)
                         .eventType(eventType)
                         .faceCount(0)                       // n/a for audio events
                         .headDirection(null)                // n/a
-                        .gazeDirection(null)                // n/a
+                        .consecutiveCount(0)                // n/a for audio events
+                        .decibelLevel(result.getNoisePercentage())
                         .speechDetected(result.isSpeechDetected())
                         .speakerCount(result.getSpeakerCount())
                         .detectedAt(now)
                         .build();
 
-        sessionViolations
-                .computeIfAbsent(
-                        sessionId,
-                        id -> new CopyOnWriteArrayList<>()
-                )
-                .add(violation);
+        proctoringViolationRepository.save(entity);
     }
 
 
     // ================= SHARED QUERY METHODS (unchanged) =================
 
     // GET ALL VIOLATIONS
-    public ProctoringViolationResponse getViolations(Long sessionId) {
+
+    public ProctoringViolationResponse getViolations(
+            Long sessionId
+    ) {
 
         List<ProctoringViolation> violations =
                 proctoringViolationRepository
@@ -192,7 +182,6 @@ public class ProctoringViolationService {
                         )
                         .toList();
 
-                sessionViolations.getOrDefault(sessionId, List.of());
 
         return ProctoringViolationResponse.builder()
                 .sessionId(
@@ -207,10 +196,6 @@ public class ProctoringViolationService {
                 .message(
                         "Proctoring violations fetched successfully"
                 )
-                .sessionId(sessionId)
-                .totalViolations(violations.size())
-                .violations(List.copyOf(violations))
-                .message("Proctoring violations fetched successfully")
                 .build();
     }
 
@@ -228,14 +213,15 @@ public class ProctoringViolationService {
                                 sessionId
                         )
         );
-    public int getTotalViolationCount(Long sessionId) {
-        return sessionViolations
-                .getOrDefault(sessionId, List.of())
-                .size();
     }
 
+
+
     // GET EVENT-WISE VIOLATION COUNTS
-    public Map<String, Long> getViolationCounts(Long sessionId) {
+
+    public Map<String, Long> getViolationCounts(
+            Long sessionId
+    ) {
 
         return proctoringViolationRepository
                 .findBySessionId(
@@ -265,6 +251,9 @@ public class ProctoringViolationService {
                 entity.getFaceCount(),
                 entity.getHeadDirection(),
                 entity.getConsecutiveCount(),
+                entity.getDecibelLevel(),
+                entity.getSpeechDetected(),
+                entity.getSpeakerCount(),
                 entity.getDetectedAt()
         );
     }
@@ -272,8 +261,6 @@ public class ProctoringViolationService {
     public Map<String, Long> getHeadDirectionCounts(
             Long sessionId
     ) {
-        List<ProctoringViolation> violations =
-                sessionViolations.getOrDefault(sessionId, List.of());
 
         return proctoringViolationRepository
                 .findBySessionId(
@@ -291,9 +278,5 @@ public class ProctoringViolationService {
                                 Collectors.counting()
                         )
                 );
-                .collect(Collectors.groupingBy(
-                        ProctoringViolation::getEventType,
-                        Collectors.counting()
-                ));
     }
 }
