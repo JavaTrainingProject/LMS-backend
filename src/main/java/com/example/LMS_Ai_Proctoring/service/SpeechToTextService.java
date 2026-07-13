@@ -3,6 +3,7 @@ package com.example.LMS_Ai_Proctoring.service;
 import com.example.LMS_Ai_Proctoring.dto.SpeechToTextResult;
 import com.example.LMS_Ai_Proctoring.entity.SpeechTranscript;
 import com.example.LMS_Ai_Proctoring.repository.SpeechTranscriptRepository;
+import com.example.LMS_Ai_Proctoring.responseDTO.SpeechToTextResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,8 +12,10 @@ import org.vosk.Model;
 import org.vosk.Recognizer;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 public class SpeechToTextService {
@@ -92,5 +95,22 @@ public class SpeechToTextService {
         if (recognizer != null) {
             recognizer.close();
         }
+    }
+
+    public SpeechToTextResponse getTranscripts(Long sessionId) {
+
+        List<SpeechTranscript> transcripts =
+                speechTranscriptRepository
+                        .findBySessionIdOrderByDetectedAtAsc(sessionId);
+
+        List<String> transcriptTexts = transcripts.stream()
+                .map(SpeechTranscript::getTranscribedText)
+                .collect(Collectors.toList());
+
+        return SpeechToTextResponse.builder()
+                .sessionId(sessionId)
+                .transcripts(transcriptTexts)
+                .message("Fetched Successfully")
+                .build();
     }
 }

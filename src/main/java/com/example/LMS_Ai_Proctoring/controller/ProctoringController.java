@@ -34,6 +34,9 @@ public class ProctoringController {
     private final ProctoringViolationService proctoringViolationService;
 
     @Autowired
+    private final AudioConversionService audioConversionService;
+
+    @Autowired
     private AudioAnalysisService audioAnalysisService;
 
     @Autowired
@@ -300,19 +303,43 @@ public class ProctoringController {
             @RequestParam(defaultValue = "0") Long sessionId,
             @RequestBody byte[] audioChunk) {
         try {
-            AudioAnalysisResult audioResult = audioAnalysisService.analyze(audioChunk);
+            byte[] pcmAudio =
+                    audioConversionService.convert(audioChunk);
+            AudioAnalysisResult audioResult =
+                    audioAnalysisService.analyze(pcmAudio);
             proctoringViolationService.evaluateAudioResult(sessionId, audioResult);
 
-            SpeechToTextResult transcriptResult = speechToTextService.transcribeChunk(sessionId, audioChunk);
+            SpeechToTextResult transcript =
+                    speechToTextService.transcribeChunk(
+                            sessionId,
+                            pcmAudio
+                    );
 
             Map<String, Object> response = new HashMap<>();
             response.put("audio", audioResult);
-            response.put("transcript", transcriptResult);
+            response.put("transcript", transcript);
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(e.getMessage() + " | " + e.getClass().getName());
+        }
+    }
+
+    @GetMapping("/session/{sessionId}/transcripts")
+    public ResponseEntity<?> getTranscripts(
+            @PathVariable Long sessionId
+    ) {
+        try {
+            SpeechToTextResponse response =
+                    speechToTextService.getTranscripts(sessionId);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500)
+                    .body(e.getMessage() + " | " + e.getClass().getName());
         }
     }
 }
