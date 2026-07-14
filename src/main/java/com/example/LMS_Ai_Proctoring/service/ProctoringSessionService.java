@@ -52,6 +52,9 @@ public class ProctoringSessionService {
                         .lookingDownCount(0)
                         .noFaceCount(0)
                         .multipleFacesCount(0)
+                        .consecutiveNoiseCount(0)
+                        .consecutiveSpeechCount(0)
+                        .audioWarningCount(0)
                         .build();
 
 

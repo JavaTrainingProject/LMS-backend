@@ -42,6 +42,9 @@ public class ProctoringController {
     @Autowired
     private SpeechToTextService speechToTextService;
 
+    @Autowired
+    private AudioWarningService audioWarningService;
+
 
 
     // 1. SINGLE IMAGE TEST API
@@ -300,15 +303,26 @@ public class ProctoringController {
 
     @PostMapping(value = "/audio/analyze", consumes = "audio/*")
     public ResponseEntity<?> analyzeAudio(
-            @RequestParam(defaultValue = "0") Long sessionId,
+            @RequestParam Long sessionId,
             @RequestBody byte[] audioChunk) {
+
         try {
-            byte[] pcmAudio =
-                    audioConversionService.convert(audioChunk);
+
+            // Convert browser WebM -> PCM
+            byte[] pcmAudio = audioConversionService.convert(audioChunk);
+
+            // Analyze audio
             AudioAnalysisResult audioResult =
                     audioAnalysisService.analyze(pcmAudio);
-            proctoringViolationService.evaluateAudioResult(sessionId, audioResult);
 
+            // Process warnings & store violations
+            AudioWarningResponse warningResponse =
+                    audioWarningService.processAudio(
+                            sessionId,
+                            audioResult
+                    );
+
+            // Speech-to-Text
             SpeechToTextResult transcript =
                     speechToTextService.transcribeChunk(
                             sessionId,
@@ -316,13 +330,21 @@ public class ProctoringController {
                     );
 
             Map<String, Object> response = new HashMap<>();
-            response.put("audio", audioResult);
+            response.put("audio", warningResponse);
             response.put("transcript", transcript);
 
             return ResponseEntity.ok(response);
+
         } catch (Exception e) {
+
             e.printStackTrace();
-            return ResponseEntity.status(500).body(e.getMessage() + " | " + e.getClass().getName());
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", e.getMessage());
+
+            return ResponseEntity.internalServerError()
+                    .body(error);
         }
     }
 

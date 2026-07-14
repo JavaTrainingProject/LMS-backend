@@ -1,17 +1,15 @@
-package com.example.LMS_Ai_Proctoring.dto;
+package com.example.LMS_Ai_Proctoring.responseDTO;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AudioAnalysisResult {
-
+public class AudioWarningResponse {
 
     private boolean noiseDetected;
 
@@ -19,10 +17,11 @@ public class AudioAnalysisResult {
 
     private int speakerCount;
 
-    private double noisePercentage;
+    private boolean warningGenerated;
 
+    private String warningMessage;
 
-    private double speechPercentage;
+    private int warningCount;
 
-    private long timestampMillis;
+    private boolean terminateAssessment;
 }

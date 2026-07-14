@@ -1,32 +1,44 @@
 package com.example.LMS_Ai_Proctoring.service;
 
 import com.example.LMS_Ai_Proctoring.dto.AudioAnalysisResult;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class AudioAnalysisService {
 
-    @Autowired
-    private NoiseDetectionService noiseDetectionService;
 
     @Autowired
-    private SpeechDetectionService speechDetectionService;
+    private final NoiseDetectionService noiseDetectionService;
+
+    @Autowired
+    private final SpeechDetectionService speechDetectionService;
 
     public AudioAnalysisResult analyze(byte[] audioChunk) {
-        double noisePct = noiseDetectionService.calculateNoisePercentage(audioChunk);
-        double speechPct = speechDetectionService.calculateSpeechPercentage(audioChunk);
 
-        boolean noiseDetected = noiseDetectionService.isNoiseDetected(noisePct);
-        boolean speechDetected = speechDetectionService.isSpeechDetected(speechPct);
-        int speakerCount = speechDetectionService.estimateSpeakerCount(speechPct);
+        double noisePercentage =
+                noiseDetectionService.calculateNoisePercentage(audioChunk);
+
+        double speechPercentage =
+                speechDetectionService.calculateSpeechPercentage(audioChunk);
+
+        boolean noiseDetected =
+                noiseDetectionService.isNoiseDetected(noisePercentage);
+
+        boolean speechDetected =
+                speechDetectionService.isSpeechDetected(speechPercentage);
+
+        int speakerCount =
+                speechDetectionService.estimateSpeakerCount(speechPercentage);
 
         return AudioAnalysisResult.builder()
                 .noiseDetected(noiseDetected)
                 .speechDetected(speechDetected)
-                .noisePercentage(noisePct)
-                .speechPercentage(speechPct)
                 .speakerCount(speakerCount)
+                .noisePercentage(noisePercentage)
+                .speechPercentage(speechPercentage)
                 .timestampMillis(System.currentTimeMillis())
                 .build();
     }
