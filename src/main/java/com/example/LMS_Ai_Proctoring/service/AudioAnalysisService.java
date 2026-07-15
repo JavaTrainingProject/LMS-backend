@@ -2,27 +2,23 @@ package com.example.LMS_Ai_Proctoring.service;
 
 import com.example.LMS_Ai_Proctoring.dto.AudioAnalysisResult;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 public class AudioAnalysisService {
 
-
-    @Autowired
     private final NoiseDetectionService noiseDetectionService;
 
-    @Autowired
     private final SpeechDetectionService speechDetectionService;
 
-    public AudioAnalysisResult analyze(byte[] audioChunk) {
+    public AudioAnalysisResult analyze(byte[] pcmAudio) {
 
         double noisePercentage =
-                noiseDetectionService.calculateNoisePercentage(audioChunk);
+                noiseDetectionService.calculateNoisePercentage(pcmAudio);
 
         double speechPercentage =
-                speechDetectionService.calculateSpeechPercentage(audioChunk);
+                speechDetectionService.calculateSpeechPercentage(pcmAudio);
 
         boolean noiseDetected =
                 noiseDetectionService.isNoiseDetected(noisePercentage);
@@ -31,7 +27,7 @@ public class AudioAnalysisService {
                 speechDetectionService.isSpeechDetected(speechPercentage);
 
         int speakerCount =
-                speechDetectionService.estimateSpeakerCount(speechPercentage);
+                speechDetectionService.estimateSpeakerCount(pcmAudio);
 
         return AudioAnalysisResult.builder()
                 .noiseDetected(noiseDetected)

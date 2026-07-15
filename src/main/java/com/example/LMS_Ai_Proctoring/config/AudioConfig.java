@@ -19,8 +19,8 @@ public class AudioConfig {
     }
 
     // Threshold in dB above which audio is flagged as "loud noise"
-    public static final double NOISE_DB_THRESHOLD = 0.15;
+    public static final double NOISE_THRESHOLD_PERCENT = 20.0;
 
     // Minimum RMS energy for a frame to be considered "speech-like"
-    public static final double SPEECH_ENERGY_THRESHOLD = 0.04;
+    public static final double SPEECH_THRESHOLD_PERCENT = 1.5;
 }

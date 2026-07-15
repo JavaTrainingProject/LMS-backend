@@ -24,4 +24,8 @@ public class AudioWarningResponse {
     private int warningCount;
 
     private boolean terminateAssessment;
+
+    private double noisePercentage;
+
+    private double speechPercentage;
 }

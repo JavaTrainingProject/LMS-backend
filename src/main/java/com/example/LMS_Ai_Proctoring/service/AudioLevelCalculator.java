@@ -5,22 +5,28 @@ import org.springframework.stereotype.Component;
 @Component
 public class AudioLevelCalculator {
 
-    /**
-     * Returns normalized RMS amplitude as a 0.0–1.0 value
-     * (multiply by 100 to get a percentage).
-     */
-    public double calculateNormalizedRms(byte[] audioData) {
-        if (audioData == null || audioData.length < 2) return 0.0;
+    public double calculateNormalizedRms(byte[] pcmData) {
 
-        long sumSquares = 0;
-        int sampleCount = audioData.length / 2;
+        if (pcmData == null || pcmData.length < 2)
+            return 0;
 
-        for (int i = 0; i < audioData.length - 1; i += 2) {
-            short sample = (short) ((audioData[i + 1] << 8) | (audioData[i] & 0xFF));
-            sumSquares += (long) sample * sample;
+        long sum = 0;
+
+        int samples = pcmData.length / 2;
+
+        for (int i = 0; i < pcmData.length - 1; i += 2) {
+
+            short sample = (short) (
+                    (pcmData[i] & 0xff)
+                            | (pcmData[i + 1] << 8)
+            );
+
+            sum += sample * sample;
         }
 
-        double rms = Math.sqrt(sumSquares / (double) sampleCount);
-        return rms / 32768.0; // normalize to 0.0–1.0
+        double rms =
+                Math.sqrt(sum / (double) samples);
+
+        return rms / 32768.0;
     }
 }

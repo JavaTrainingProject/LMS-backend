@@ -6,7 +6,7 @@ import com.example.LMS_Ai_Proctoring.repository.SpeechTranscriptRepository;
 import com.example.LMS_Ai_Proctoring.responseDTO.SpeechToTextResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.vosk.Model;
 import org.vosk.Recognizer;
@@ -15,102 +15,140 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class SpeechToTextService {
 
-    @Autowired
-    private Model voskModel;
+    private final Model voskModel;
 
-    @Autowired
-    private SpeechTranscriptRepository speechTranscriptRepository;
+    private final SpeechTranscriptRepository speechTranscriptRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // One Recognizer per active session - keeps streaming context between chunks
-    private final Map<Long, Recognizer> sessionRecognizers = new ConcurrentHashMap<>();
+    /**
+     * One streaming recognizer per session.
+     */
+    private final Map<Long, Recognizer> recognizers =
+            new ConcurrentHashMap<>();
 
-    private Recognizer getOrCreateRecognizer(Long sessionId) {
-        if (sessionId == null) {
-            throw new IllegalArgumentException("sessionId cannot be null - was handshake sent?");
-        }
-        return sessionRecognizers.computeIfAbsent(sessionId, id -> {
+    private Recognizer getRecognizer(Long sessionId) {
+
+        Recognizer recognizer = recognizers.get(sessionId);
+
+        if (recognizer == null) {
+
             try {
-                return new Recognizer(voskModel, 16000.0f);
+
+                recognizer = new Recognizer(voskModel, 16000.0f);
+
+                recognizers.put(sessionId, recognizer);
+
             } catch (Exception e) {
-                throw new RuntimeException("Failed to create Vosk recognizer", e);
+
+                throw new RuntimeException("Failed to create Vosk Recognizer", e);
+
             }
-        });
+
+        }
+
+        return recognizer;
     }
 
     /**
-     * Feed one audio chunk (from the WebSocket stream) into the recognizer
-     * for this session. Returns partial or final transcribed text.
+     * Accept raw PCM bytes from browser.
      */
-    public SpeechToTextResult transcribeChunk(Long sessionId, byte[] audioChunk) {
-        Recognizer recognizer = getOrCreateRecognizer(sessionId);
+    public SpeechToTextResult transcribeChunk(
+            Long sessionId,
+            byte[] pcmAudio
+    ) {
 
         try {
-            boolean isFinal = recognizer.acceptWaveForm(audioChunk, audioChunk.length);
-            String resultJson = isFinal ? recognizer.getResult() : recognizer.getPartialResult();
 
-            JsonNode node = objectMapper.readTree(resultJson);
-            String text = isFinal
-                    ? node.path("text").asText("")
-                    : node.path("partial").asText("");
+            Recognizer recognizer =
+                    getRecognizer(sessionId);
 
-            SpeechToTextResult result = SpeechToTextResult.builder()
-                    .text(text)
-                    .isFinal(isFinal)
-                    .confidence(1.0) // Vosk doesn't expose per-word confidence in this simple mode
-                    .build();
+            boolean isFinal =
+                    recognizer.acceptWaveForm(
+                            pcmAudio,
+                            pcmAudio.length
+                    );
 
-            // Persist only final, non-empty transcripts to MSSQL
+            String json =
+                    isFinal
+                            ? recognizer.getResult()
+                            : recognizer.getPartialResult();
+
+            JsonNode node =
+                    objectMapper.readTree(json);
+
+            String text =
+                    isFinal
+                            ? node.path("text").asText("")
+                            : node.path("partial").asText("");
+
             if (isFinal && !text.isBlank()) {
-                saveTranscript(sessionId, text);
+
+                SpeechTranscript transcript =
+                        SpeechTranscript.builder()
+                                .sessionId(sessionId)
+                                .transcribedText(text)
+                                .confidence(1.0)
+                                .detectedAt(LocalDateTime.now())
+                                .build();
+
+                speechTranscriptRepository.save(transcript);
             }
 
-            return result;
+            return SpeechToTextResult.builder()
+                    .text(text)
+                    .isFinal(isFinal)
+                    .confidence(1.0)
+                    .build();
 
         } catch (Exception e) {
-            throw new RuntimeException("Speech-to-text processing failed", e);
+
+            throw new RuntimeException(
+                    "Speech recognition failed",
+                    e
+            );
         }
+
     }
 
-    private void saveTranscript(Long sessionId, String text) {
-        SpeechTranscript transcript = SpeechTranscript.builder()
-                .sessionId(sessionId)
-                .transcribedText(text)
-                .confidence(1.0)
-                .detectedAt(LocalDateTime.now())
-                .build();
-
-        speechTranscriptRepository.save(transcript);
-    }
-
-    // Call when a proctoring session ends, to free native resources
+    /**
+     * Release Vosk native resources.
+     */
     public void closeSession(Long sessionId) {
-        Recognizer recognizer = sessionRecognizers.remove(sessionId);
+
+        Recognizer recognizer =
+                recognizers.remove(sessionId);
+
         if (recognizer != null) {
+
             recognizer.close();
+
         }
+
     }
 
+    /**
+     * Fetch all stored transcripts.
+     */
     public SpeechToTextResponse getTranscripts(Long sessionId) {
 
-        List<SpeechTranscript> transcripts =
+        List<String> transcripts =
                 speechTranscriptRepository
-                        .findBySessionIdOrderByDetectedAtAsc(sessionId);
-
-        List<String> transcriptTexts = transcripts.stream()
-                .map(SpeechTranscript::getTranscribedText)
-                .collect(Collectors.toList());
+                        .findBySessionIdOrderByDetectedAtAsc(sessionId)
+                        .stream()
+                        .map(SpeechTranscript::getTranscribedText)
+                        .toList();
 
         return SpeechToTextResponse.builder()
                 .sessionId(sessionId)
-                .transcripts(transcriptTexts)
+                .transcripts(transcripts)
                 .message("Fetched Successfully")
                 .build();
     }
+
 }

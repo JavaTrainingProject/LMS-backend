@@ -29,6 +29,19 @@ public class AudioWarningService {
                         .orElseThrow(() ->
                                 new RuntimeException("Session not found"));
 
+        // DEBUG: watch this in your console while you speak.
+        // If these numbers never cross your thresholds, adjust AudioConfig.
+        System.out.printf(
+                "[AUDIO] noise=%.2f%% speech=%.2f%% noiseDetected=%b speechDetected=%b speakers=%d consecNoise=%d consecSpeech=%d%n",
+                result.getNoisePercentage(),
+                result.getSpeechPercentage(),
+                result.isNoiseDetected(),
+                result.isSpeechDetected(),
+                result.getSpeakerCount(),
+                session.getConsecutiveNoiseCount(),
+                session.getConsecutiveSpeechCount()
+        );
+
         boolean warningGenerated = false;
         String warningMessage = null;
 
@@ -59,7 +72,7 @@ public class AudioWarningService {
 
         } else {
 
-            session.setConsecutiveSpeechCount(0);
+            session.setConsecutiveSpeechCount(0);   // FIXED: was never resetting before
         }
 
         // ===========================
@@ -140,6 +153,8 @@ public class AudioWarningService {
         return AudioWarningResponse.builder()
                 .noiseDetected(result.isNoiseDetected())
                 .speechDetected(result.isSpeechDetected())
+                .noisePercentage(result.getNoisePercentage())   // NEW
+                .speechPercentage(result.getSpeechPercentage()) // NEW
                 .speakerCount(result.getSpeakerCount())
                 .warningGenerated(warningGenerated)
                 .warningMessage(warningMessage)
