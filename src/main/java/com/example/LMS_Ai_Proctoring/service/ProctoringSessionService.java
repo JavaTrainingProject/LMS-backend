@@ -1,19 +1,21 @@
 package com.example.LMS_Ai_Proctoring.service;
 
-import com.example.LMS_Ai_Proctoring.dto.ProctoringSession;
+import com.example.LMS_Ai_Proctoring.entity.ProctoringSessionEntity;
+import com.example.LMS_Ai_Proctoring.enums.ProctoringSessionStatus;
 import com.example.LMS_Ai_Proctoring.exception.ProctoringSessionNotActiveException;
 import com.example.LMS_Ai_Proctoring.exception.ProctoringSessionNotFoundException;
+import com.example.LMS_Ai_Proctoring.repository.ProctoringSessionRepository;
 import com.example.LMS_Ai_Proctoring.responseDTO.ProctoringSessionResponse;
-
 import com.example.LMS_Ai_Proctoring.responseDTO.ProctoringSummaryResponse;
+
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+
+import static com.example.LMS_Ai_Proctoring.enums.ProctoringSessionStatus.ENDED;
 
 
 @Service
@@ -22,19 +24,15 @@ public class ProctoringSessionService {
 
     private final ProctoringService proctoringService;
 
-    private final ProctoringViolationService proctoringViolationService;
+    private final ProctoringViolationService
+            proctoringViolationService;
 
+    private final ProctoringSessionRepository
+            proctoringSessionRepository;
 
-    // IN-MEMORY SESSION STORAGE
-    private final Map<Long, ProctoringSession> sessions =
-            new ConcurrentHashMap<>();
+    private final SpeechToTextService
+            speechToTextService;
 
-
-
-    // SESSION ID GENERATOR
-
-    private final AtomicLong sessionIdGenerator =
-            new AtomicLong(1000);
 
 
 
@@ -42,52 +40,70 @@ public class ProctoringSessionService {
 
     public ProctoringSessionResponse startSession() {
 
-        Long sessionId =
-                sessionIdGenerator.incrementAndGet();
+        ProctoringSessionEntity session =
+                ProctoringSessionEntity.builder()
+                        .status(String.valueOf(ProctoringSessionStatus.ACTIVE))
+                        .startedAt(LocalDateTime.now())
+                        .endedAt(null)
+                        .totalViolations(0)
+                        .lookingLeftCount(0)
+                        .lookingRightCount(0)
+                        .lookingUpCount(0)
+                        .lookingDownCount(0)
+                        .noFaceCount(0)
+                        .multipleFacesCount(0)
+                        .consecutiveNoiseCount(0)
+                        .consecutiveSpeechCount(0)
+                        .audioWarningCount(0)
+                        .build();
 
 
-        ProctoringSession session =
-                new ProctoringSession(
-                        sessionId,
-                        "ACTIVE",
-                        LocalDateTime.now(),
-                        null
+        ProctoringSessionEntity savedSession =
+                proctoringSessionRepository.save(
+                        session
                 );
 
 
-        sessions.put(
-                sessionId,
-                session
-        );
-
-
         return buildResponse(
-                session,
+                savedSession,
                 "Proctoring session started successfully"
         );
+    }
+
+    // CLOSE SPEECH RECOGNIZER SAFELY
+
+    private void closeRecognizerSafely(
+            Long sessionId
+    ) {
+
+        try {
+
+            speechToTextService.closeSession(
+                    sessionId
+            );
+
+        } catch (Exception e) {
+
+            // Log and swallow — session end must still succeed
+            // even if recognizer cleanup fails
+            e.printStackTrace();
+        }
     }
 
 
 
     // VALIDATE ACTIVE SESSION
+
     public void validateActiveSession(
             Long sessionId
     ) {
 
-        ProctoringSession session =
-                sessions.get(sessionId);
+        ProctoringSessionEntity session =
+                getSessionEntity(
+                        sessionId
+                );
 
 
-        // SESSION NOT FOUND
-        if (session == null) {
-
-            throw new ProctoringSessionNotFoundException(
-                    "Proctoring session not found"
-            );
-        }
-
-
-        // SESSION NOT ACTIVE
         if (!"ACTIVE".equals(
                 session.getStatus()
         )) {
@@ -106,20 +122,12 @@ public class ProctoringSessionService {
             Long sessionId
     ) {
 
-        ProctoringSession session =
-                sessions.get(sessionId);
+        ProctoringSessionEntity session =
+                getSessionEntity(
+                        sessionId
+                );
 
 
-        // SESSION NOT FOUND
-        if (session == null) {
-
-            throw new ProctoringSessionNotFoundException(
-                    "Proctoring session not found"
-            );
-        }
-
-
-        // SESSION ALREADY ENDED / NOT ACTIVE
         if (!"ACTIVE".equals(
                 session.getStatus()
         )) {
@@ -130,29 +138,147 @@ public class ProctoringSessionService {
         }
 
 
-        // UPDATE STATUS
+        // GET TOTAL VIOLATION COUNT
+
+        int totalViolations =
+                proctoringViolationService
+                        .getTotalViolationCount(
+                                sessionId
+                        );
+
+
+        // GET EVENT-WISE COUNTS
+
+        Map<String, Long> violationCounts =
+                proctoringViolationService
+                        .getViolationCounts(
+                                sessionId
+                        );
+
+
+        // GET HEAD DIRECTION-WISE COUNTS
+
+        Map<String, Long> headDirectionCounts =
+                proctoringViolationService
+                        .getHeadDirectionCounts(
+                                sessionId
+                        );
+
+
+        // UPDATE SESSION STATUS
+
         session.setStatus(
-                "ENDED"
+                String.valueOf(ProctoringSessionStatus.ENDED)
         );
 
 
-        // SET END TIME
         session.setEndedAt(
                 LocalDateTime.now()
         );
 
 
-        // Clear consecutive-frame monitoring state
+        // UPDATE TOTAL VIOLATIONS
+
+        session.setTotalViolations(
+                totalViolations
+        );
+
+
+        // UPDATE LOOKING LEFT COUNT
+
+        session.setLookingLeftCount(
+                headDirectionCounts
+                        .getOrDefault(
+                                "LOOKING_LEFT",
+                                0L
+                        )
+                        .intValue()
+        );
+
+
+        // UPDATE LOOKING RIGHT COUNT
+
+        session.setLookingRightCount(
+                headDirectionCounts
+                        .getOrDefault(
+                                "LOOKING_RIGHT",
+                                0L
+                        )
+                        .intValue()
+        );
+
+
+        // UPDATE LOOKING UP COUNT
+
+        session.setLookingUpCount(
+                headDirectionCounts
+                        .getOrDefault(
+                                "LOOKING_UP",
+                                0L
+                        )
+                        .intValue()
+        );
+
+
+        // UPDATE LOOKING DOWN COUNT
+
+        session.setLookingDownCount(
+                headDirectionCounts
+                        .getOrDefault(
+                                "LOOKING_DOWN",
+                                0L
+                        )
+                        .intValue()
+        );
+
+
+        // UPDATE NO FACE COUNT
+
+        session.setNoFaceCount(
+                violationCounts
+                        .getOrDefault(
+                                "NO_FACE_DETECTED",
+                                0L
+                        )
+                        .intValue()
+        );
+
+
+        // UPDATE MULTIPLE FACES COUNT
+
+        session.setMultipleFacesCount(
+                violationCounts
+                        .getOrDefault(
+                                "MULTIPLE_FACES_DETECTED",
+                                0L
+                        )
+                        .intValue()
+        );
+
+
+        // SAVE FINAL SESSION ANALYSIS
+
+        ProctoringSessionEntity savedSession =
+                proctoringSessionRepository.save(
+                        session
+                );
+
+
+        // CLEAR ONLY TEMPORARY MONITORING STATE
+
         proctoringService.clearSession(
                 sessionId
         );
 
+        closeRecognizerSafely(sessionId);   //
+
 
         return buildResponse(
-                session,
+                savedSession,
                 "Proctoring session ended successfully"
         );
     }
+
 
 
     // GET SESSION
@@ -161,17 +287,10 @@ public class ProctoringSessionService {
             Long sessionId
     ) {
 
-        ProctoringSession session =
-                sessions.get(sessionId);
-
-
-        // SESSION NOT FOUND
-        if (session == null) {
-
-            throw new ProctoringSessionNotFoundException(
-                    "Proctoring session not found"
-            );
-        }
+        ProctoringSessionEntity session =
+                getSessionEntity(
+                        sessionId
+                );
 
 
         return buildResponse(
@@ -182,48 +301,19 @@ public class ProctoringSessionService {
 
 
 
-    // BUILD RESPONSE
-
-    private ProctoringSessionResponse buildResponse(
-            ProctoringSession session,
-            String message
-    ) {
-
-        return ProctoringSessionResponse.builder()
-                .sessionId(
-                        session.getSessionId()
-                )
-                .status(
-                        session.getStatus()
-                )
-                .startedAt(
-                        session.getStartedAt()
-                )
-                .endedAt(
-                        session.getEndedAt()
-                )
-                .message(message)
-                .build();
-    }
-
-
-// GET SESSION SUMMARY
+    // GET SESSION SUMMARY
 
     public ProctoringSummaryResponse getSessionSummary(
             Long sessionId
     ) {
 
-        ProctoringSession session =
-                sessions.get(sessionId);
+        ProctoringSessionEntity session =
+                getSessionEntity(
+                        sessionId
+                );
 
 
-        if (session == null) {
-
-            throw new ProctoringSessionNotFoundException(
-                    "Proctoring session not found"
-            );
-        }
-
+        // GET TOTAL VIOLATION COUNT
 
         int totalViolations =
                 proctoringViolationService
@@ -232,6 +322,8 @@ public class ProctoringSessionService {
                         );
 
 
+        // GET EVENT-WISE COUNTS
+
         Map<String, Long> violationCounts =
                 proctoringViolationService
                         .getViolationCounts(
@@ -239,9 +331,54 @@ public class ProctoringSessionService {
                         );
 
 
+        // GET HEAD DIRECTION-WISE COUNTS
+
+        Map<String, Long> headDirectionCounts =
+                proctoringViolationService
+                        .getHeadDirectionCounts(
+                                sessionId
+                        );
+
+
+        violationCounts.put(
+                "LOOKING_LEFT",
+                headDirectionCounts.getOrDefault(
+                        "LOOKING_LEFT",
+                        0L
+                )
+        );
+
+
+        violationCounts.put(
+                "LOOKING_RIGHT",
+                headDirectionCounts.getOrDefault(
+                        "LOOKING_RIGHT",
+                        0L
+                )
+        );
+
+
+        violationCounts.put(
+                "LOOKING_UP",
+                headDirectionCounts.getOrDefault(
+                        "LOOKING_UP",
+                        0L
+                )
+        );
+
+
+        violationCounts.put(
+                "LOOKING_DOWN",
+                headDirectionCounts.getOrDefault(
+                        "LOOKING_DOWN",
+                        0L
+                )
+        );
+
+
         return ProctoringSummaryResponse.builder()
                 .sessionId(
-                        session.getSessionId()
+                        session.getId()
                 )
                 .status(
                         session.getStatus()
@@ -260,6 +397,54 @@ public class ProctoringSessionService {
                 )
                 .message(
                         "Proctoring summary fetched successfully"
+                )
+                .build();
+    }
+
+
+
+    // GET SESSION ENTITY
+
+    private ProctoringSessionEntity getSessionEntity(
+            Long sessionId
+    ) {
+
+        return proctoringSessionRepository
+                .findById(
+                        sessionId
+                )
+                .orElseThrow(
+                        () ->
+                                new ProctoringSessionNotFoundException(
+                                        "Proctoring session not found"
+                                )
+                );
+    }
+
+
+
+    // BUILD RESPONSE
+
+    private ProctoringSessionResponse buildResponse(
+            ProctoringSessionEntity session,
+            String message
+    ) {
+
+        return ProctoringSessionResponse.builder()
+                .sessionId(
+                        session.getId()
+                )
+                .status(
+                        session.getStatus()
+                )
+                .startedAt(
+                        session.getStartedAt()
+                )
+                .endedAt(
+                        session.getEndedAt()
+                )
+                .message(
+                        message
                 )
                 .build();
     }
