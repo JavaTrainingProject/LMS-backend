@@ -5,15 +5,24 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class AudioAnalysisResult {
+
+
     private boolean noiseDetected;
+
     private boolean speechDetected;
-    private double noisePercentage;   // 0-100
-    private double speechPercentage;  // 0-100 (same underlying value as noisePercentage now)
+
     private int speakerCount;
+
+    private double noisePercentage;
+
+
+    private double speechPercentage;
+
     private long timestampMillis;
 }

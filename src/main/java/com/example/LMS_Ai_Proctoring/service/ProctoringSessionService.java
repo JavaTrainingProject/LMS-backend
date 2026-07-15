@@ -30,6 +30,9 @@ public class ProctoringSessionService {
     private final ProctoringSessionRepository
             proctoringSessionRepository;
 
+    private final SpeechToTextService
+            speechToTextService;
+
 
 
 
@@ -49,6 +52,9 @@ public class ProctoringSessionService {
                         .lookingDownCount(0)
                         .noFaceCount(0)
                         .multipleFacesCount(0)
+                        .consecutiveNoiseCount(0)
+                        .consecutiveSpeechCount(0)
+                        .audioWarningCount(0)
                         .build();
 
 
@@ -62,6 +68,26 @@ public class ProctoringSessionService {
                 savedSession,
                 "Proctoring session started successfully"
         );
+    }
+
+    // CLOSE SPEECH RECOGNIZER SAFELY
+
+    private void closeRecognizerSafely(
+            Long sessionId
+    ) {
+
+        try {
+
+            speechToTextService.closeSession(
+                    sessionId
+            );
+
+        } catch (Exception e) {
+
+            // Log and swallow — session end must still succeed
+            // even if recognizer cleanup fails
+            e.printStackTrace();
+        }
     }
 
 
@@ -243,6 +269,8 @@ public class ProctoringSessionService {
         proctoringService.clearSession(
                 sessionId
         );
+
+        closeRecognizerSafely(sessionId);   //
 
 
         return buildResponse(

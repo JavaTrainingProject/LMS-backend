@@ -1,27 +1,45 @@
 package com.example.LMS_Ai_Proctoring.service;
 
 import com.example.LMS_Ai_Proctoring.config.AudioConfig;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class NoiseDetectionService {
 
-    @Autowired
-    private AudioLevelCalculator audioLevelCalculator;
+    private final AudioLevelCalculator audioLevelCalculator;
 
-    public double calculateNoisePercentage(byte[] audioData) {
-        return audioLevelCalculator.calculateNormalizedRms(audioData) * 100;
+    /**
+     * Calculate microphone volume percentage.
+     */
+    public double calculateNoisePercentage(byte[] pcmAudio) {
+
+        double rms =
+                audioLevelCalculator.calculateNormalizedRms(pcmAudio);
+
+        return Math.min(rms * 100.0, 100.0);
     }
 
+    /**
+     * Whether microphone volume exceeds configured threshold.
+     */
     public boolean isNoiseDetected(double noisePercentage) {
-        return noisePercentage >= AudioConfig.NOISE_DB_THRESHOLD * 100;
+
+        return noisePercentage >= AudioConfig.NOISE_THRESHOLD_PERCENT;
     }
 
+    /**
+     * Optional severity used by UI.
+     */
     public String classifySeverity(double noisePercentage) {
-        double thresholdPct = AudioConfig.NOISE_DB_THRESHOLD * 100;
-        if (noisePercentage < thresholdPct) return "LOW";
-        if (noisePercentage < thresholdPct + 20) return "MODERATE";
+
+        if (noisePercentage < 25)
+            return "LOW";
+
+        if (noisePercentage < 60)
+            return "MEDIUM";
+
         return "HIGH";
     }
 }

@@ -10,6 +10,7 @@ import com.example.LMS_Ai_Proctoring.service.*;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -38,6 +39,9 @@ public class ProctoringController {
 
     @Autowired
     private SpeechToTextService speechToTextService;
+
+    @Autowired
+    private AudioWarningService audioWarningService;
 
 
 
@@ -295,24 +299,73 @@ public class ProctoringController {
         );
     }
 
-    @PostMapping(value = "/audio/analyze", consumes = "audio/*")
+    @PostMapping(
+            value = "/audio/analyze",
+            consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
     public ResponseEntity<?> analyzeAudio(
-            @RequestParam(defaultValue = "0") Long sessionId,
-            @RequestBody byte[] audioChunk) {
-        try {
-            AudioAnalysisResult audioResult = audioAnalysisService.analyze(audioChunk);
-            proctoringViolationService.evaluateAudioResult(sessionId, audioResult);
+            @RequestParam Long sessionId,
+            @RequestBody byte[] pcmAudio) {
 
-            SpeechToTextResult transcriptResult = speechToTextService.transcribeChunk(sessionId, audioChunk);
+        try {
+
+            System.out.println("Received PCM bytes = " + pcmAudio.length);
+
+            // Analyze noise using raw PCM
+            AudioAnalysisResult audioResult =
+                    audioAnalysisService.analyze(pcmAudio);
+
+            // Process warnings
+            AudioWarningResponse warningResponse =
+                    audioWarningService.processAudio(
+                            sessionId,
+                            audioResult
+                    );
+
+            // Speech Recognition using raw PCM
+            SpeechToTextResult transcript =
+                    speechToTextService.transcribeChunk(
+                            sessionId,
+                            pcmAudio
+                    );
 
             Map<String, Object> response = new HashMap<>();
-            response.put("audio", audioResult);
-            response.put("transcript", transcriptResult);
+            response.put("audio", warningResponse);
+            response.put("transcript", transcript);
 
             return ResponseEntity.ok(response);
+
         } catch (Exception e) {
+
             e.printStackTrace();
-            return ResponseEntity.status(500).body(e.getMessage() + " | " + e.getClass().getName());
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", e.getMessage());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(error);
+        }
+    }
+
+    @GetMapping("/session/{sessionId}/transcripts")
+    public ResponseEntity<?> getTranscripts(
+            @PathVariable Long sessionId) {
+
+        try {
+
+            SpeechToTextResponse response =
+                    speechToTextService.getTranscripts(sessionId);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(e.getMessage());
         }
     }
 }

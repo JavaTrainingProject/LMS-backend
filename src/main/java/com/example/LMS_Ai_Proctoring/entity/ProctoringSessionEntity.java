@@ -119,4 +119,53 @@ public class ProctoringSessionEntity {
     )
     @Builder.Default
     private Integer multipleFacesCount = 0;
+
+    @Column(
+            name = "warning_count",
+            nullable = false
+    )
+    @Builder.Default
+    private Integer warningCount = 0;
+
+    /**
+     * Consecutive loud noise detections.
+     */
+    @Column(
+            name = "consecutive_noise_count",
+            nullable = false
+    )
+    @Builder.Default
+    private Integer consecutiveNoiseCount = 0;
+
+    /**
+     * Consecutive speech detections.
+     */
+    @Column(
+            name = "consecutive_speech_count",
+            nullable = false
+    )
+    @Builder.Default
+    private Integer consecutiveSpeechCount = 0;
+
+    @Column(name = "audio_warning_count")
+    @Builder.Default
+    private Integer audioWarningCount = 0;
+
+    @Column(
+            name = "consecutive_multiple_speaker_count",
+            nullable = false
+    )
+    @Builder.Default
+    private Integer consecutiveMultipleSpeakerCount = 0;
+
+    /**
+     * Assessment terminated by backend.
+     */
+    @Column(
+            name = "terminated",
+            nullable = false
+    )
+    @Builder.Default
+    private Boolean terminated = false;
+
 }
