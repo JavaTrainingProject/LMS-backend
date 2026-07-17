@@ -147,7 +147,10 @@ public class ProctoringService {
                     currentEvent,
                     consecutiveCount,
                     analysisResult,
-                    "Violation confirmed and recorded"
+                    getViolationMessage(
+                            currentEvent,
+                            analysisResult
+                    )
             );
         }
 
@@ -158,7 +161,10 @@ public class ProctoringService {
                 currentEvent,
                 consecutiveCount,
                 analysisResult,
-                "Suspicious activity detected"
+                getViolationMessage(
+                        currentEvent,
+                        analysisResult
+                )
         );
     }
 
@@ -219,7 +225,44 @@ public class ProctoringService {
         return null;
     }
 
+    // Get violation message
+    private String getViolationMessage(
+            String eventType,
+            FaceAnalysisResult result
+    ) {
 
+        switch (eventType) {
+
+            case "NO_FACE_DETECTED":
+                return "No face detected. Please keep your face visible.";
+
+            case "MULTIPLE_FACES_DETECTED":
+                return "Multiple faces detected. Only one candidate is allowed.";
+
+            case "LOOKING_AWAY":
+
+                if ("LOOKING_LEFT".equals(result.getHeadDirection())) {
+                    return "Candidate is looking left.";
+                }
+
+                if ("LOOKING_RIGHT".equals(result.getHeadDirection())) {
+                    return "Candidate is looking right.";
+                }
+
+                if ("LOOKING_UP".equals(result.getHeadDirection())) {
+                    return "Candidate is looking up.";
+                }
+
+                if ("LOOKING_DOWN".equals(result.getHeadDirection())) {
+                    return "Candidate is looking down.";
+                }
+
+                return "Candidate is looking away from the screen.";
+
+            default:
+                return "Suspicious activity detected.";
+        }
+    }
     // Build response
     private ProctoringFrameResponse buildResponse(
             Long sessionId,
